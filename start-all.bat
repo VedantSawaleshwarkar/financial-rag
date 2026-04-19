@@ -6,7 +6,7 @@ echo ========================================
 echo.
 
 echo [1/3] Starting Backend Server...
-start "Financial RAG Backend" /min cmd /c "cd /d \"%~dp0backend\" && python -m uvicorn simple_main:app --reload --host 0.0.0.0 --port 8001"
+start "Financial RAG Backend" /min cmd /c "cd /d \"%~dp0backend\" && python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000"
 
 echo [2/3] Waiting for backend to initialize...
 timeout /t 5 /nobreak >nul
@@ -18,7 +18,7 @@ echo.
 echo ========================================
 echo    Servers Starting...
 echo ========================================
-echo Backend API: http://localhost:8001
+echo Backend API: http://localhost:8000
 echo Frontend App: http://localhost:3000
 echo.
 
@@ -32,7 +32,7 @@ echo.
 echo ========================================
 echo Application is running!
 echo ========================================
-echo Backend: http://localhost:8001
+echo Backend: http://localhost:8000
 echo Frontend: http://localhost:3000
 echo.
 echo Press any key to close this window...

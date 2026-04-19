@@ -11,7 +11,20 @@ embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 chroma  = chromadb.PersistentClient(path="./chroma_store")
 col     = chroma.get_or_create_collection("financial_kb")
-groq_cl = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+# Try to initialize Groq client, fall back to demo mode if no API key
+demo_mode = False
+try:
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key or api_key == "":
+        raise ValueError("No API key provided")
+    groq_cl = Groq(api_key=api_key)
+    print("Groq API client initialized successfully")
+except Exception as e:
+    print(f"Groq API not available: {e}")
+    print("Running in DEMO MODE - Using mock responses")
+    demo_mode = True
+    groq_cl = None
 
 KNOWLEDGE_BASE = [
     "RBI kept repo rate unchanged at 6.5% in April 2025 to manage inflation.",
@@ -71,7 +84,7 @@ Use ONLY the context and real-time market data below. Do not hallucinate prices.
 Answer in 3-4 sentences. Cite sources like [Source 1]. End with one actionable insight for an Indian retail investor."""
 
     resp = groq_cl.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.1-8b-instant",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=350,
         temperature=0.3,
