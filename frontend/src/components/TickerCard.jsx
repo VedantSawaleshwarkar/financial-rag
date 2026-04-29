@@ -1,131 +1,125 @@
 import Spark from "./Spark";
 
-// Ticker card component with OHLC data and price flash animations
+function formatCompactNumber(value) {
+  if (value === undefined || value === null) {
+    return "--";
+  }
+
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`;
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(1)}K`;
+  }
+
+  return value.toString();
+}
+
 function TickerCard({ name, data, meta, selected, onClick, sparkVals, priceFlash }) {
   const up = (data?.change_pct ?? 0) >= 0;
-  const col = up ? "#34d399" : "#f87171";
-  
-  // Format volume
-  const formatVolume = (volume) => {
-    if (volume >= 1000000) {
-      return `${(volume / 1000000).toFixed(1)}M`;
-    } else if (volume >= 1000) {
-      return `${(volume / 1000).toFixed(1)}K`;
-    }
-    return volume.toString();
-  };
+  const accent = up ? "#34d399" : "#f87171";
 
   return (
-    <button 
-      onClick={onClick} 
+    <button
+      onClick={onClick}
       style={{
-        background: selected ? "rgba(16,185,129,0.07)" : "rgba(13,17,23,0.9)",
-        border: `1px solid ${selected ? "#10b981" : "#1e293b"}`,
-        borderRadius: 12,
-        padding: 16,
-        cursor: "pointer",
-        transition: "all 0.15s",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
         width: "100%",
+        borderRadius: 20,
+        border: selected ? "1px solid rgba(56,189,248,0.45)" : "1px solid rgba(148,163,184,0.12)",
+        background: selected
+          ? "linear-gradient(180deg, rgba(8,47,73,0.4), rgba(7,16,31,0.95))"
+          : "linear-gradient(180deg, rgba(15,23,42,0.76), rgba(5,10,21,0.94))",
+        padding: 18,
+        cursor: "pointer",
         textAlign: "left",
         position: "relative",
-        overflow: "hidden"
+        overflow: "hidden",
+        color: "#e2e8f0",
+        boxShadow: selected ? "0 18px 40px rgba(14,165,233,0.12)" : "none",
       }}
     >
-      {/* Price Flash Animation */}
       {priceFlash?.flash && (
-        <div 
+        <div
           style={{
             position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: priceFlash?.isUp ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)",
-            animation: "priceFlash 0.6s ease-out",
-            pointerEvents: "none"
+            inset: 0,
+            background: priceFlash.isUp ? "rgba(52,211,153,0.12)" : "rgba(248,113,113,0.12)",
+            pointerEvents: "none",
           }}
         />
       )}
-      
-      <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
-        <div style={{
-          width: 5,
-          height: 5,
-          borderRadius: "50%",
-          background: selected ? col : "#6b7280",
-          marginTop: -2
-        }} />
-        <div style={{ flex: 1 }}>
-          <div style={{ 
-            fontSize: 14, 
-            fontWeight: "bold", 
-            color: "#f1f5f9", 
-            fontFamily: "monospace", 
-            marginBottom: 4 
-          }}>
-            {name}
-          </div>
-          <div style={{ 
-            fontSize: 20, 
-            fontWeight: 700, 
-            color: "#f1f5f9", 
-            fontFamily: "monospace" 
-          }}>
-            {data?.price?.toLocaleString("en-IN") || "0.00"}
-          </div>
-          
-          {/* OHLC Data */}
-          <div style={{ 
-            display: "flex", 
-            gap: "12px", 
-            fontSize: 10, 
-            color: "#64748b", 
-            fontFamily: "monospace",
-            marginTop: 4
-          }}>
-            <span>O: {data?.open?.toLocaleString("en-IN") || "0.00"}</span>
-            <span>H: {data?.high?.toLocaleString("en-IN") || "0.00"}</span>
-            <span>L: {data?.low?.toLocaleString("en-IN") || "0.00"}</span>
-          </div>
-          
-          <div style={{ 
-            fontSize: 12, 
-            color: "#475569", 
-            fontFamily: "monospace", 
-            marginTop: 2 
-          }}>
-            {meta?.sub}
-          </div>
-          
-          {/* Volume */}
-          {data?.volume && (
-            <div style={{ 
-              fontSize: 10, 
-              color: "#64748b", 
-              fontFamily: "monospace", 
-              marginTop: 4,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px"
-            }}>
-              <span style={{ opacity: 0.7 }}>Vol:</span>
-              <span>{formatVolume(data.volume)}</span>
+
+      <div style={{ position: "relative", zIndex: 1 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div>
+            <div
+              style={{
+                color: "#94a3b8",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                marginBottom: 8,
+              }}
+            >
+              {meta?.venue} | {meta?.code}
             </div>
-          )}
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ 
-            fontSize: 12, 
-            color: col, 
-            fontFamily: "monospace", 
-            fontWeight: "bold" 
-          }}>
-            {data?.change_pct >= 0 ? "+" : ""}{data?.change_pct?.toFixed(2)}%
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#f8fafc", marginBottom: 6 }}>{meta?.label || name}</div>
+            <div style={{ fontSize: 30, fontWeight: 700, color: "#f8fafc", lineHeight: 1.05 }}>
+              {data?.price?.toLocaleString("en-IN", { maximumFractionDigits: 2 }) || "--"}
+            </div>
           </div>
-          <Spark vals={sparkVals} up={up} />
+
+          <div style={{ textAlign: "right" }}>
+            <div
+              style={{
+                color: accent,
+                fontSize: 15,
+                fontWeight: 700,
+                marginBottom: 10,
+              }}
+            >
+              {up ? "+" : ""}
+              {data?.change_pct?.toFixed(2) || "0.00"}%
+            </div>
+            <div style={{ opacity: 0.8 }}>
+              <Spark vals={sparkVals} up={up} />
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 10,
+            marginTop: 18,
+            paddingTop: 16,
+            borderTop: "1px solid rgba(148,163,184,0.08)",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>Open</div>
+            <div style={{ marginTop: 6, fontSize: 13, color: "#cbd5e1" }}>
+              {data?.open?.toLocaleString("en-IN", { maximumFractionDigits: 2 }) || "--"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>High</div>
+            <div style={{ marginTop: 6, fontSize: 13, color: "#cbd5e1" }}>
+              {data?.high?.toLocaleString("en-IN", { maximumFractionDigits: 2 }) || "--"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>Low</div>
+            <div style={{ marginTop: 6, fontSize: 13, color: "#cbd5e1" }}>
+              {data?.low?.toLocaleString("en-IN", { maximumFractionDigits: 2 }) || "--"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>Volume</div>
+            <div style={{ marginTop: 6, fontSize: 13, color: "#cbd5e1" }}>{formatCompactNumber(data?.volume)}</div>
+          </div>
         </div>
       </div>
     </button>

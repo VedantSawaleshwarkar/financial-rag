@@ -1,663 +1,340 @@
-import { useState, useEffect } from "react";
+const STACK_SECTIONS = [
+  {
+    title: "Frontend",
+    summary: "React 18 + React Router power the interface layer.",
+    color: "#38bdf8",
+    items: [
+      {
+        tool: "React 18",
+        why: "Used for component-based screens like Dashboard, Advisor, Market, Portfolio, and Learn.",
+      },
+      {
+        tool: "React Router",
+        why: "Handles navigation between pages without a full page reload.",
+      },
+      {
+        tool: "Inline styled UI",
+        why: "Keeps the terminal-style visual language close to each page for fast iteration.",
+      },
+    ],
+  },
+  {
+    title: "Backend",
+    summary: "FastAPI exposes the app’s market and advisor endpoints.",
+    color: "#22c55e",
+    items: [
+      {
+        tool: "FastAPI",
+        why: "Lightweight Python API framework with clean routing and good fit for ML-backed endpoints.",
+      },
+      {
+        tool: "Uvicorn",
+        why: "Runs the ASGI app and supports the real-time backend workflow cleanly.",
+      },
+      {
+        tool: "Pydantic",
+        why: "Validates request bodies like advisor questions and keeps API inputs structured.",
+      },
+    ],
+  },
+  {
+    title: "Market Data",
+    summary: "Live quotes and history are fetched from Yahoo Finance.",
+    color: "#f59e0b",
+    items: [
+      {
+        tool: "yfinance",
+        why: "Simple way to pull market prices and intraday history for a prototype without paid exchange feeds.",
+      },
+      {
+        tool: "WebSocket + polling fallback",
+        why: "Keeps the dashboard updating in near real time while still working if the socket drops.",
+      },
+      {
+        tool: "Pandas",
+        why: "Used to normalize and read historical OHLCV data returned by the market feed.",
+      },
+    ],
+  },
+  {
+    title: "AI / RAG",
+    summary: "The advisor combines retrieval, embeddings, and an LLM response layer.",
+    color: "#a78bfa",
+    items: [
+      {
+        tool: "sentence-transformers",
+        why: "Creates text embeddings so financial knowledge can be searched semantically.",
+      },
+      {
+        tool: "all-MiniLM-L6-v2",
+        why: "Small and fast embedding model that is good enough for lightweight local RAG.",
+      },
+      {
+        tool: "ChromaDB",
+        why: "Stores embeddings and retrieves the most relevant knowledge snippets for a user query.",
+      },
+      {
+        tool: "Groq API",
+        why: "Provides fast LLM inference when a valid API key is configured.",
+      },
+    ],
+  },
+];
 
-const Learn = () => {
-  const [hoveredCard, setHoveredCard] = useState(null);
+const PIPELINE = [
+  { step: "1", title: "User asks a question", detail: "The Advisor page sends the question to the backend." },
+  { step: "2", title: "Relevant context is retrieved", detail: "The query is embedded and searched against ChromaDB." },
+  { step: "3", title: "Market snapshot is attached", detail: "Current market values are added so answers stay grounded." },
+  { step: "4", title: "LLM or fallback response is generated", detail: "Groq responds when available, otherwise the app uses a local fallback path." },
+  { step: "5", title: "Answer returns to the UI", detail: "The frontend renders the response inside the Advisor chat experience." },
+];
 
-  const ragSteps = [
-    {
-      id: "data-ingestion",
-      title: "Data Ingestion",
-      tool: "yfinance",
-      description: "Real-time market data collection from Yahoo Finance API",
-      reason: "Chosen for reliable, free access to Indian and global market data",
-      features: ["Live price feeds", "Historical data", "Multiple asset classes", "15-minute updates"],
-      icon: "DATA",
-      color: "#10b981"
-    },
-    {
-      id: "storage-engine",
-      title: "Storage Engine", 
-      tool: "ChromaDB",
-      description: "Vector database for storing and retrieving document embeddings",
-      reason: "Optimized for similarity search with embeddings, handles large datasets efficiently",
-      features: ["Vector similarity search", "Metadata filtering", "Scalable storage", "Fast retrieval"],
-      icon: "STORE",
-      color: "#3b82f6"
-    },
-    {
-      id: "backend-engine",
-      title: "Backend Engine",
-      tool: "FastAPI",
-      description: "High-performance Python web framework for API endpoints",
-      reason: "Automatic documentation, async support, and excellent performance for ML workloads",
-      features: ["Auto-generated docs", "Async support", "Type hints", "Fast performance"],
-      icon: "API",
-      color: "#ef4444"
-    },
-    {
-      id: "embedding-model",
-      title: "Embedding Model",
-      tool: "MiniLM",
-      description: "Lightweight sentence transformer for text embeddings",
-      reason: "Balanced performance and speed, perfect for financial text analysis",
-      features: ["384 dimensions", "Fast inference", "Good accuracy", "Low memory usage"],
-      icon: "EMBED",
-      color: "#8b5cf6"
-    },
-    {
-      id: "llm-inference",
-      title: "LLM Inference",
-      tool: "Groq LLaMA 3",
-      description: "Large Language Model for generating financial insights and advice",
-      reason: "Extremely fast inference, cost-effective, and high-quality responses",
-      features: ["70B parameters", "8K context", "Fast inference", "Cost-effective"],
-      icon: "LLM",
-      color: "#f59e0b"
-    },
-    {
-      id: "output-processing",
-      title: "Output Processing",
-      tool: "React + Terminal UI",
-      description: "Frontend interface for displaying results and user interaction",
-      reason: "Responsive design, real-time updates, and excellent user experience",
-      features: ["Real-time updates", "Responsive design", "Interactive charts", "Terminal aesthetic"],
-      icon: "TERM",
-      color: "#06b6d4"
-    }
-  ];
+const CHOICES = [
+  {
+    title: "Why React?",
+    text: "This app has several dashboard-like pages with shared navigation and repeated UI blocks. React keeps those screens modular and easier to evolve.",
+  },
+  {
+    title: "Why FastAPI?",
+    text: "The project mixes REST endpoints, WebSocket updates, and AI-driven handlers. FastAPI is a clean fit for that Python-heavy workflow.",
+  },
+  {
+    title: "Why ChromaDB + embeddings?",
+    text: "A plain keyword search is weak for financial questions. Embeddings help the advisor retrieve meaningfully similar context before answering.",
+  },
+  {
+    title: "Why yfinance?",
+    text: "For a learning project and prototype, it offers fast access to market data without the cost and setup of broker-grade feeds.",
+  },
+];
 
-  const pipelineFlow = [
-    "User Question",
-    "Text Embedding", 
-    "Vector Search",
-    "Document Retrieval",
-    "Context Augmentation",
-    "LLM Generation",
-    "Response Processing"
-  ];
-
+function Learn() {
   return (
-    <div style={{ 
-      minHeight: "100vh", 
-      background: "#020817", 
-      color: "#e2e8f0", 
-      fontFamily: "'IBM Plex Mono','Courier New',monospace",
-      marginLeft: "250px" // Account for sidebar
-    }}>
-      
-      {/* Header */}
-      <div style={{
-        padding: "20px",
-        borderBottom: "1px solid #1e293b",
-        background: "rgba(13,17,23,0.8)"
-      }}>
-        <h1 style={{
-          fontSize: "24px",
-          fontWeight: "700",
-          color: "#f1f5f9",
-          marginBottom: "8px",
-          letterSpacing: "2px"
-        }}>
-          <span style={{ color: "#10b981" }}>RAG</span> PIPELINE EXPLAINER
-        </h1>
-        <div style={{
-          fontSize: "12px",
-          color: "#94a3b8",
-          letterSpacing: "1px"
-        }}>
-          Understanding how our AI-powered financial advisory system works
-        </div>
-      </div>
-
-      {/* Introduction */}
-      <section style={{
-        padding: "40px 20px",
-        maxWidth: "1200px",
-        margin: "0 auto"
-      }}>
-        <div style={{
-          fontSize: "12px",
-          color: "#334155",
-          letterSpacing: "2px",
-          marginBottom: "20px",
-          textAlign: "center"
-        }}>
-          OVERVIEW
-        </div>
-        
-        <h2 style={{
-          fontSize: "32px",
-          fontWeight: "700",
-          color: "#f1f5f9",
-          marginBottom: "20px",
-          textAlign: "center"
-        }}>
-          Retrieval-Augmented Generation for Financial Intelligence
-        </h2>
-        
-        <p style={{
-          fontSize: "14px",
-          color: "#94a3b8",
-          lineHeight: "1.6",
-          textAlign: "center",
-          maxWidth: "800px",
-          margin: "0 auto 40px"
-        }}>
-          Our system combines real-time market data with advanced AI to provide intelligent financial advice. 
-          The RAG pipeline ensures responses are grounded in accurate, up-to-date information while maintaining 
-          the conversational capabilities of large language models.
-        </p>
-      </section>
-
-      {/* Pipeline Flow */}
-      <section style={{
-        padding: "40px 20px",
-        background: "linear-gradient(135deg, #0f172a 0%, #020817 100%)"
-      }}>
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          <div style={{
-            fontSize: "12px",
-            color: "#334155",
-            letterSpacing: "2px",
-            marginBottom: "20px",
-            textAlign: "center"
-          }}>
-            DATA FLOW
+    <div
+      style={{
+        minHeight: "100vh",
+        marginLeft: "250px",
+        padding: "28px",
+        background:
+          "radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.08), transparent 24%), #020817",
+        color: "#e2e8f0",
+        fontFamily: "'IBM Plex Mono','Courier New',monospace",
+      }}
+    >
+      <div style={{ maxWidth: 1320, margin: "0 auto" }}>
+        <section
+          style={{
+            padding: "28px 30px",
+            borderRadius: 28,
+            border: "1px solid rgba(148,163,184,0.12)",
+            background: "linear-gradient(180deg, rgba(15,23,42,0.9), rgba(5,10,21,0.96))",
+            boxShadow: "0 24px 60px rgba(2,6,23,0.42)",
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ fontSize: 11, color: "#7c8aa5", letterSpacing: "0.16em", textTransform: "uppercase" }}>
+            Learn
           </div>
-          
-          <h2 style={{
-            fontSize: "24px",
-            fontWeight: "700",
-            color: "#f1f5f9",
-            marginBottom: "40px",
-            textAlign: "center"
-          }}>
-            How Information Flows Through the System
-          </h2>
-          
-          <div style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            position: "relative",
-            padding: "20px 0"
-          }}>
-            {pipelineFlow.map((step, index) => (
-              <div key={index} style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "12px",
-                zIndex: 1
-              }}>
-                <div style={{
-                  width: "120px",
-                  height: "80px",
-                  background: "rgba(16,185,129,0.1)",
-                  border: "1px solid rgba(16,185,129,0.3)",
-                  borderRadius: "12px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  textAlign: "center",
-                  fontSize: "10px",
-                  color: "#10b981",
-                  fontFamily: "monospace",
-                  fontWeight: "600",
-                  padding: "8px",
-                  transition: "all 0.3s ease"
-                }}>
-                  {step}
-                </div>
-                {index < pipelineFlow.length - 1 && (
-                  <div style={{
-                    position: "absolute",
-                    top: "40px",
-                    left: `${(index + 1) * (100 / pipelineFlow.length)}%`,
-                    width: "20px",
-                    height: "2px",
-                    background: "#10b981",
-                    transform: "translateX(-50%)"
-                  }} />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+          <h1 style={{ margin: "12px 0 10px", fontSize: "clamp(30px, 4vw, 44px)", lineHeight: 1.05 }}>
+            Tech stack, explained cleanly
+          </h1>
+          <p style={{ margin: 0, maxWidth: 820, color: "#94a3b8", fontSize: 14, lineHeight: 1.7 }}>
+            This project is a financial RAG app with a React frontend, a FastAPI backend, live market data from
+            Yahoo Finance, and a lightweight retrieval pipeline for the advisor. Below is the actual stack used in
+            this repo and the reason each layer exists.
+          </p>
+        </section>
 
-      {/* Component Cards */}
-      <section style={{
-        padding: "40px 20px",
-        maxWidth: "1400px",
-        margin: "0 auto"
-      }}>
-        <div style={{
-          fontSize: "12px",
-          color: "#334155",
-          letterSpacing: "2px",
-          marginBottom: "20px",
-          textAlign: "center"
-        }}>
-          SYSTEM COMPONENTS
-        </div>
-        
-        <h2 style={{
-          fontSize: "24px",
-          fontWeight: "700",
-          color: "#f1f5f9",
-          marginBottom: "40px",
-          textAlign: "center"
-        }}>
-          Each Component and Its Role
-        </h2>
-        
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
-          gap: "30px"
-        }}>
-          {ragSteps.map((step, index) => (
-            <div
-              key={step.id}
-              style={{
-                background: "rgba(13,17,23,0.8)",
-                border: `1px solid ${hoveredCard === step.id ? step.color : "#1e293b"}`,
-                borderRadius: "16px",
-                padding: "30px",
-                position: "relative",
-                transition: "all 0.3s ease",
-                transform: hoveredCard === step.id ? "translateY(-5px)" : "translateY(0)",
-                boxShadow: hoveredCard === step.id 
-                  ? `0 20px 40px ${step.color}20` 
-                  : "0 4px 6px rgba(0,0,0,0.1)"
-              }}
-              onMouseEnter={() => setHoveredCard(step.id)}
-              onMouseLeave={() => setHoveredCard(null)}
-            >
-              {/* Step Number */}
-              <div style={{
-                position: "absolute",
-                top: "-15px",
-                left: "30px",
-                background: step.color,
-                color: "white",
-                width: "30px",
-                height: "30px",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "12px",
-                fontWeight: "700"
-              }}>
-                {index + 1}
-              </div>
-              
-              {/* Header */}
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "16px",
-                marginBottom: "20px"
-              }}>
-                <div style={{
-                  width: "50px",
-                  height: "50px",
-                  background: `${step.color}20`,
-                  border: `1px solid ${step.color}`,
-                  borderRadius: "12px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "10px",
-                  color: step.color,
-                  fontWeight: "700",
-                  fontFamily: "monospace"
-                }}>
-                  {step.icon}
-                </div>
-                <div>
-                  <h3 style={{
-                    fontSize: "16px",
-                    fontWeight: "700",
-                    color: step.color,
-                    marginBottom: "4px",
-                    letterSpacing: "1px"
-                  }}>
-                    {step.title}
-                  </h3>
-                  <div style={{
-                    fontSize: "11px",
-                    color: "#94a3b8",
-                    fontFamily: "monospace"
-                  }}>
-                    {step.tool}
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.2fr 0.8fr",
+            gap: 20,
+            marginBottom: 24,
+          }}
+          className="learn-top-grid"
+        >
+          <div
+            style={{
+              padding: 24,
+              borderRadius: 24,
+              border: "1px solid rgba(148,163,184,0.12)",
+              background: "rgba(15,23,42,0.72)",
+            }}
+          >
+            <div style={{ fontSize: 11, color: "#7c8aa5", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 16 }}>
+              Architecture Flow
+            </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {PIPELINE.map((item) => (
+                <div
+                  key={item.step}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "54px 1fr",
+                    gap: 14,
+                    padding: 16,
+                    borderRadius: 18,
+                    border: "1px solid rgba(148,163,184,0.08)",
+                    background: "rgba(2,6,23,0.42)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: 14,
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(56,189,248,0.14)",
+                      color: "#38bdf8",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {item.step}
+                  </div>
+                  <div>
+                    <div style={{ color: "#f8fafc", fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{item.title}</div>
+                    <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6 }}>{item.detail}</div>
                   </div>
                 </div>
-              </div>
-              
-              {/* Description */}
-              <p style={{
-                fontSize: "12px",
-                color: "#e2e8f0",
-                lineHeight: "1.6",
-                marginBottom: "16px"
-              }}>
-                {step.description}
-              </p>
-              
-              {/* Why Chosen */}
-              <div style={{
-                background: "rgba(16,185,129,0.05)",
-                border: "1px solid rgba(16,185,129,0.2)",
-                borderRadius: "8px",
-                padding: "12px",
-                marginBottom: "16px"
-              }}>
-                <div style={{
-                  fontSize: "10px",
-                  color: "#10b981",
-                  letterSpacing: "1px",
-                  marginBottom: "6px",
-                  fontWeight: "600"
-                }}>
-                  WHY CHOSEN
+              ))}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: 24,
+              borderRadius: 24,
+              border: "1px solid rgba(148,163,184,0.12)",
+              background: "rgba(15,23,42,0.72)",
+            }}
+          >
+            <div style={{ fontSize: 11, color: "#7c8aa5", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 16 }}>
+              In This Repo
+            </div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {[
+                "Frontend: React 18, React Router, react-scripts",
+                "Backend: FastAPI, Uvicorn, Pydantic",
+                "Data: yfinance, pandas, pytz",
+                "RAG: sentence-transformers, all-MiniLM-L6-v2, ChromaDB",
+                "LLM: Groq API with fallback behavior",
+                "Utilities: python-dotenv, httpx, python-multipart",
+              ].map((line) => (
+                <div
+                  key={line}
+                  style={{
+                    padding: "14px 16px",
+                    borderRadius: 16,
+                    border: "1px solid rgba(148,163,184,0.08)",
+                    background: "rgba(2,6,23,0.42)",
+                    color: "#cbd5e1",
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {line}
                 </div>
-                <div style={{
-                  fontSize: "11px",
-                  color: "#94a3b8",
-                  lineHeight: "1.5"
-                }}>
-                  {step.reason}
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 11, color: "#7c8aa5", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 16 }}>
+            Stack Breakdown
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
+            {STACK_SECTIONS.map((section) => (
+              <div
+                key={section.title}
+                style={{
+                  padding: 22,
+                  borderRadius: 24,
+                  border: "1px solid rgba(148,163,184,0.12)",
+                  background: "linear-gradient(180deg, rgba(15,23,42,0.82), rgba(5,10,21,0.94))",
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-flex",
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    border: `1px solid ${section.color}55`,
+                    background: `${section.color}14`,
+                    color: section.color,
+                    fontSize: 11,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    marginBottom: 14,
+                  }}
+                >
+                  {section.title}
                 </div>
-              </div>
-              
-              {/* Features */}
-              <div>
-                <div style={{
-                  fontSize: "10px",
-                  color: "#334155",
-                  letterSpacing: "1px",
-                  marginBottom: "8px",
-                  fontWeight: "600"
-                }}>
-                  KEY FEATURES
-                </div>
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "6px"
-                }}>
-                  {step.features.map((feature, idx) => (
-                    <div key={idx} style={{
-                      fontSize: "10px",
-                      color: "#94a3b8",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px"
-                    }}>
-                      <div style={{
-                        width: "4px",
-                        height: "4px",
-                        borderRadius: "50%",
-                        background: step.color
-                      }} />
-                      {feature}
+                <div style={{ color: "#f8fafc", fontSize: 18, fontWeight: 700, marginBottom: 10 }}>{section.summary}</div>
+                <div style={{ display: "grid", gap: 12 }}>
+                  {section.items.map((item) => (
+                    <div
+                      key={item.tool}
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: 16,
+                        border: "1px solid rgba(148,163,184,0.08)",
+                        background: "rgba(2,6,23,0.4)",
+                      }}
+                    >
+                      <div style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{item.tool}</div>
+                      <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6 }}>{item.why}</div>
                     </div>
                   ))}
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
 
-      {/* Technical Architecture */}
-      <section style={{
-        padding: "40px 20px",
-        background: "linear-gradient(135deg, #020817 0%, #0f172a 100%)"
-      }}>
-        <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-          <div style={{
-            fontSize: "12px",
-            color: "#334155",
-            letterSpacing: "2px",
-            marginBottom: "20px",
-            textAlign: "center"
-          }}>
-            TECHNICAL ARCHITECTURE
+        <section
+          style={{
+            padding: 24,
+            borderRadius: 24,
+            border: "1px solid rgba(148,163,184,0.12)",
+            background: "rgba(15,23,42,0.72)",
+          }}
+        >
+          <div style={{ fontSize: 11, color: "#7c8aa5", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 16 }}>
+            Why These Choices
           </div>
-          
-          <h2 style={{
-            fontSize: "24px",
-            fontWeight: "700",
-            color: "#f1f5f9",
-            marginBottom: "40px",
-            textAlign: "center"
-          }}>
-            System Design Overview
-          </h2>
-          
-          <div style={{
-            background: "rgba(13,17,23,0.8)",
-            border: "1px solid #1e293b",
-            borderRadius: "16px",
-            padding: "30px"
-          }}>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-              gap: "20px"
-            }}>
-              <div>
-                <h4 style={{
-                  fontSize: "14px",
-                  color: "#10b981",
-                  marginBottom: "12px",
-                  letterSpacing: "1px"
-                }}>
-                  Frontend Layer
-                </h4>
-                <ul style={{
-                  fontSize: "11px",
-                  color: "#94a3b8",
-                  lineHeight: "1.6",
-                  paddingLeft: "20px"
-                }}>
-                  <li>React 18 with Hooks</li>
-                  <li>React Router for navigation</li>
-                  <li>Terminal-style UI components</li>
-                  <li>Real-time data updates</li>
-                  <li>Responsive design</li>
-                </ul>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+            {CHOICES.map((choice) => (
+              <div
+                key={choice.title}
+                style={{
+                  padding: 18,
+                  borderRadius: 18,
+                  border: "1px solid rgba(148,163,184,0.08)",
+                  background: "rgba(2,6,23,0.42)",
+                }}
+              >
+                <div style={{ color: "#f8fafc", fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{choice.title}</div>
+                <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.65 }}>{choice.text}</div>
               </div>
-              
-              <div>
-                <h4 style={{
-                  fontSize: "14px",
-                  color: "#3b82f6",
-                  marginBottom: "12px",
-                  letterSpacing: "1px"
-                }}>
-                  Backend Layer
-                </h4>
-                <ul style={{
-                  fontSize: "11px",
-                  color: "#94a3b8",
-                  lineHeight: "1.6",
-                  paddingLeft: "20px"
-                }}>
-                  <li>FastAPI web framework</li>
-                  <li>Async request handling</li>
-                  <li>RESTful API endpoints</li>
-                  <li>CORS configuration</li>
-                  <li>Error handling middleware</li>
-                </ul>
-              </div>
-              
-              <div>
-                <h4 style={{
-                  fontSize: "14px",
-                  color: "#8b5cf6",
-                  marginBottom: "12px",
-                  letterSpacing: "1px"
-                }}>
-                  AI/ML Layer
-                </h4>
-                <ul style={{
-                  fontSize: "11px",
-                  color: "#94a3b8",
-                  lineHeight: "1.6",
-                  paddingLeft: "20px"
-                }}>
-                  <li>MiniLM embeddings</li>
-                  <li>ChromaDB vector storage</li>
-                  <li>Groq LLaMA 3 inference</li>
-                  <li>RAG pipeline orchestration</li>
-                  <li>Context-aware responses</li>
-                </ul>
-              </div>
-            </div>
+            ))}
           </div>
-        </div>
-      </section>
-
-      {/* Performance Metrics */}
-      <section style={{
-        padding: "40px 20px",
-        maxWidth: "1200px",
-        margin: "0 auto"
-      }}>
-        <div style={{
-          fontSize: "12px",
-          color: "#334155",
-          letterSpacing: "2px",
-          marginBottom: "20px",
-          textAlign: "center"
-        }}>
-          PERFORMANCE METRICS
-        </div>
-        
-        <h2 style={{
-          fontSize: "24px",
-          fontWeight: "700",
-          color: "#f1f5f9",
-          marginBottom: "40px",
-          textAlign: "center"
-        }}>
-          System Performance Characteristics
-        </h2>
-        
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-          gap: "20px"
-        }}>
-          <div style={{
-            background: "rgba(13,17,23,0.8)",
-            border: "1px solid #1e293b",
-            borderRadius: "12px",
-            padding: "20px",
-            textAlign: "center"
-          }}>
-            <div style={{
-              fontSize: "24px",
-              fontWeight: "700",
-              color: "#10b981",
-              marginBottom: "8px"
-            }}>
-              &lt; 500ms
-            </div>
-            <div style={{
-              fontSize: "11px",
-              color: "#94a3b8"
-            }}>
-              Average Response Time
-            </div>
-          </div>
-          
-          <div style={{
-            background: "rgba(13,17,23,0.8)",
-            border: "1px solid #1e293b",
-            borderRadius: "12px",
-            padding: "20px",
-            textAlign: "center"
-          }}>
-            <div style={{
-              fontSize: "24px",
-              fontWeight: "700",
-              color: "#3b82f6",
-              marginBottom: "8px"
-            }}>
-              99.9%
-            </div>
-            <div style={{
-              fontSize: "11px",
-              color: "#94a3b8"
-            }}>
-              Uptime
-            </div>
-          </div>
-          
-          <div style={{
-            background: "rgba(13,17,23,0.8)",
-            border: "1px solid #1e293b",
-            borderRadius: "12px",
-            padding: "20px",
-            textAlign: "center"
-          }}>
-            <div style={{
-              fontSize: "24px",
-              fontWeight: "700",
-              color: "#8b5cf6",
-              marginBottom: "8px"
-            }}>
-              1000+
-            </div>
-            <div style={{
-              fontSize: "11px",
-              color: "#94a3b8"
-            }}>
-              Concurrent Users
-            </div>
-          </div>
-          
-          <div style={{
-            background: "rgba(13,17,23,0.8)",
-            border: "1px solid #1e293b",
-            borderRadius: "12px",
-            padding: "20px",
-            textAlign: "center"
-          }}>
-            <div style={{
-              fontSize: "24px",
-              fontWeight: "700",
-              color: "#f59e0b",
-              marginBottom: "8px"
-            }}>
-              15s
-            </div>
-            <div style={{
-              fontSize: "11px",
-              color: "#94a3b8"
-            }}>
-              Data Refresh Rate
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
-        ::-webkit-scrollbar{width:3px;height:3px}
-        ::-webkit-scrollbar-track{background:#020817}
-        ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
-        body{background:#020817}
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+        @media (max-width: 1100px) {
+          .learn-top-grid {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
     </div>
   );
-};
+}
 
 export default Learn;

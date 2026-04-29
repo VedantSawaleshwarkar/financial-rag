@@ -14,22 +14,30 @@ const QUICK_QUESTIONS = [
   "What is the outlook for Indian markets?",
 ];
 
-const RAG_PIPELINE = [
-  "User Question",
-  "MiniLM Embed", 
-  "ChromaDB Search",
-  "Top 3 Docs",
-  "Groq LLaMA 3",
-  "AI Answer"
-];
+const buildFallbackAnswer = (question) => {
+  const q = question.toLowerCase();
+
+  if (q.includes("gold")) {
+    return "Gold usually behaves like a defensive allocation when uncertainty is high, so it can help diversify a portfolio rather than act as a one-shot trade. Use it as a measured hedge, not your entire strategy. Actionable insight: keep gold as a limited allocation alongside equity and debt instead of chasing spikes.";
+  }
+
+  if (q.includes("nifty") || q.includes("sensex") || q.includes("market")) {
+    return "The broader market setup looks mixed, so trend confirmation matters more than reacting to one session. It is generally better to enter in phases and keep position sizing controlled while volatility is still present. Actionable insight: stagger entries through smaller buys instead of committing all capital at once.";
+  }
+
+  if (q.includes("beginner") || q.includes("strategy") || q.includes("invest")) {
+    return "For most retail investors, disciplined SIP-style investing into diversified instruments is more reliable than trying to time every move. A clear time horizon and risk limit usually matter more than the perfect entry point. Actionable insight: start with diversified exposure and only add concentrated bets after you define your risk budget.";
+  }
+
+  return "The advisor service is temporarily running in fallback mode, so this answer is a simplified guidance summary. In general, diversification, staggered entries, and controlled position sizing are safer than concentrated short-term bets. Actionable insight: make the next decision only after checking your time horizon, risk tolerance, and allocation mix.";
+};
 
 const Advisor = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(false);
-  const [expandedSources, setExpandedSources] = useState({});
-  const chatEndRef = useRef(null);
+    const chatEndRef = useRef(null);
 
   useEffect(() => {
     // Check backend status
@@ -65,17 +73,22 @@ const Advisor = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: q })
       });
-      
+
+      if (!response.ok) {
+        throw new Error(`Advisor request failed with status ${response.status}`);
+      }
+
       const data = await response.json();
       setMessages(prev => [...prev, { 
         role: "assistant", 
-        content: data.answer, 
-        context: data.sources || "No sources available" 
+        content: data.answer
       }]);
     } catch (error) {
       setMessages(prev => [...prev, { 
         role: "assistant", 
-        content: online ? "Service temporarily unavailable. Please try again." : "Backend is offline. Please start the backend server to use the AI advisor.", 
+        content: online
+          ? buildFallbackAnswer(q)
+          : "Backend is offline. Please start the backend server to use the AI advisor.", 
         context: "" 
       }]);
     } finally {
@@ -83,13 +96,7 @@ const Advisor = () => {
     }
   };
 
-  const toggleSources = (index) => {
-    setExpandedSources(prev => ({
-      ...prev,
-      [index]: !prev[index]
-    }));
-  };
-
+  
   return (
     <div style={{ 
       minHeight: "100vh", 
@@ -100,7 +107,7 @@ const Advisor = () => {
       marginLeft: "250px" // Account for sidebar
     }}>
       
-      {/* Left Sidebar - Quick Questions & RAG Pipeline */}
+      {/* Left Sidebar - Quick Questions */}
       <div style={{
         width: "300px",
         background: "rgba(13,17,23,0.8)",
@@ -154,49 +161,6 @@ const Advisor = () => {
                 <span style={{ color: "#10b981", marginRight: "6px", fontSize: "9px" }}>{">"}</span>
                 {q}
               </button>
-            ))}
-          </div>
-        </div>
-
-        {/* RAG Pipeline */}
-        <div>
-          <div style={{
-            fontSize: "10px",
-            color: "#334155",
-            letterSpacing: "2px",
-            marginBottom: "16px"
-          }}>
-            RAG PIPELINE
-          </div>
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "6px"
-          }}>
-            {RAG_PIPELINE.map((step, index) => (
-              <div key={index} style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 12px",
-                background: "rgba(16,185,129,0.05)",
-                border: "1px solid rgba(16,185,129,0.2)",
-                borderRadius: "4px"
-              }}>
-                <div style={{
-                  width: "4px",
-                  height: "4px",
-                  borderRadius: "50%",
-                  background: "#10b981"
-                }} />
-                <div style={{
-                  fontSize: "9px",
-                  color: "#10b981",
-                  fontFamily: "monospace"
-                }}>
-                  {step}
-                </div>
-              </div>
             ))}
           </div>
         </div>
@@ -266,7 +230,7 @@ const Advisor = () => {
             color: "#94a3b8",
             letterSpacing: "1px"
           }}>
-            Powered by RAG · Groq LLaMA 3 · ChromaDB
+            Powered by AI · Groq LLaMA 3
           </div>
         </div>
 
@@ -304,57 +268,7 @@ const Advisor = () => {
             <div key={index}>
               <ChatBubble msg={message} />
               
-              {/* Sources Section */}
-              {message.role === "assistant" && message.context && (
-                <div style={{
-                  marginLeft: "48px",
-                  marginTop: "8px"
-                }}>
-                  <button
-                    onClick={() => toggleSources(index)}
-                    style={{
-                      background: "rgba(16,185,129,0.1)",
-                      border: "1px solid rgba(16,185,129,0.3)",
-                      borderRadius: "4px",
-                      color: "#10b981",
-                      padding: "6px 12px",
-                      fontSize: "9px",
-                      fontFamily: "monospace",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      transition: "all 0.15s"
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = "rgba(16,185,129,0.15)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "rgba(16,185,129,0.1)";
-                    }}
-                  >
-                    <span>{expandedSources[index] ? "v" : ">"}</span>
-                    Sources Used
-                  </button>
-                  
-                  {expandedSources[index] && (
-                    <div style={{
-                      marginTop: "8px",
-                      padding: "12px",
-                      background: "rgba(13,17,23,0.8)",
-                      border: "1px solid #1e293b",
-                      borderRadius: "6px",
-                      fontSize: "10px",
-                      color: "#94a3b8",
-                      fontFamily: "monospace",
-                      lineHeight: "1.5"
-                    }}>
-                      {message.context}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                          </div>
           ))}
           
           {loading && (

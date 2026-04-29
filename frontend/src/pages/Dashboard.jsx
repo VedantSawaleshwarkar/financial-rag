@@ -1,161 +1,165 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import TickerCard from "../components/TickerCard";
-import AreaChart from "../components/AreaChart";
-import ChatBubble from "../components/ChatBubble";
+import AdvancedTradingChart from "../components/AdvancedTradingChart";
 
 const API = "http://localhost:8000";
 
-const TICKER_META = {
-  NIFTY50:   { label: "NIFTY 50",  code: "N50",  sub: "NSE" },
-  SENSEX:    { label: "SENSEX",    code: "SNX",  sub: "BSE" },
-  GOLD:      { label: "GOLD",      code: "XAU",  sub: "MCX" },
-  CRUDE_OIL: { label: "CRUDE OIL", code: "CL",   sub: "WTI" },
-  USD_INR:   { label: "USD / INR", code: "FX",   sub: "FOREX" },
-  SILVER:    { label: "SILVER",    code: "XAG",  sub: "MCX" },
-};
-
-const QUICK_QS = [
-  "Is it a good time to buy gold?",
-  "How is Nifty 50 performing?",
-  "What is RBI current repo rate?",
-  "Should I invest in crude oil?",
-  "Best SIP strategy for 2025?",
-  "How do FII flows affect Nifty?",
+const INSTRUMENTS = [
+  { key: "NIFTY50", label: "NIFTY 50", code: "N50", venue: "NSE", apiSymbol: "NSEI" },
+  { key: "SENSEX", label: "SENSEX", code: "SNX", venue: "BSE", apiSymbol: "BSESN" },
+  { key: "GOLD", label: "Gold", code: "XAU", venue: "MCX", apiSymbol: "GC=F" },
+  { key: "CRUDE_OIL", label: "Crude Oil", code: "CL", venue: "WTI", apiSymbol: "CL=F" },
+  { key: "USD_INR", label: "USD / INR", code: "FX", venue: "FOREX", apiSymbol: "USDINR=X" },
+  { key: "SILVER", label: "Silver", code: "XAG", venue: "MCX", apiSymbol: "SI=F" },
 ];
+
+const TICKER_META = Object.fromEntries(INSTRUMENTS.map((item) => [item.key, item]));
 
 const INDICATORS = [
-  { label: "RBI Repo Rate",  value: "6.50%",      note: "Unchanged · Apr 2025" },
-  { label: "India GDP FY26", value: "7.2%",        note: "IMF projection" },
-  { label: "CPI Inflation",  value: "4.8%",        note: "Within 2-6% target" },
-  { label: "Nifty P/E",      value: "23.4x",       note: "Slightly elevated" },
-  { label: "FII Flow MTD",   value: "+2,840 Cr",   note: "Net inflow" },
-  { label: "INR / USD",      value: "83.47",       note: "Stable range" },
+  { label: "RBI Repo Rate", value: "6.50%", note: "Unchanged since Apr 2025" },
+  { label: "India GDP FY26", value: "7.2%", note: "IMF projection" },
+  { label: "CPI Inflation", value: "4.8%", note: "Comfortably in target band" },
+  { label: "Nifty P/E", value: "23.4x", note: "Above long-term average" },
+  { label: "FII Flow MTD", value: "+2,840 Cr", note: "Positive institutional flows" },
+  { label: "USD / INR", value: "83.47", note: "Stable near recent range" },
 ];
 
-const Dashboard = () => {
+const SUMMARY_ITEMS = [
+  { key: "advancers", label: "Advancers", value: "4 / 6" },
+  { key: "laggards", label: "Laggards", value: "2 / 6" },
+  { key: "focus", label: "Focus", value: "Intraday Risk" },
+];
+
+const sectionEyebrow = {
+  color: "#7c8aa5",
+  fontSize: 11,
+  letterSpacing: "0.18em",
+  textTransform: "uppercase",
+};
+
+const panelStyle = {
+  background: "linear-gradient(180deg, rgba(15,23,42,0.9), rgba(8,15,30,0.88))",
+  border: "1px solid rgba(96,165,250,0.12)",
+  borderRadius: 24,
+  boxShadow: "0 24px 60px rgba(2,6,23,0.42)",
+  backdropFilter: "blur(18px)",
+};
+
+function Dashboard() {
   const [market, setMarket] = useState({});
   const [history, setHistory] = useState({});
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [online, setOnline] = useState(false);
-  const [activeChart, setActiveChart] = useState("NSEI");
-  const [activeTk, setActiveTk] = useState("NIFTY50");
-  const [tab, setTab] = useState("chat");
-  const [demoMode, setDemoMode] = useState(false);
+  const [activeTicker, setActiveTicker] = useState("NIFTY50");
   const [marketStatus, setMarketStatus] = useState("CLOSED");
   const [lastUpdated, setLastUpdated] = useState("");
+  const [dataSource, setDataSource] = useState("fallback");
   const [priceFlashes, setPriceFlashes] = useState({});
-  const chatEndRef = useRef(null);
+
   const wsRef = useRef(null);
+  const pollingRef = useRef(null);
+  const marketRef = useRef({});
 
-  const chartOptions = [
-    { key: "NSEI", label: "NIFTY 50" },
-    { key: "BSESN", label: "SENSEX" },
-  ];
+  const activeMeta = TICKER_META[activeTicker];
+  const activeHistory = history[activeMeta.apiSymbol] || [];
 
-  // WebSocket connection
   useEffect(() => {
-    const connectWebSocket = () => {
-      try {
-        // Try different WebSocket URL formats
-        const wsUrl = window.location.protocol === 'https:' ? 'wss://localhost:8000/ws/market' : 'ws://localhost:8000/ws/market';
-        console.log('Attempting WebSocket connection to:', wsUrl);
-        
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
+    marketRef.current = market;
+  }, [market]);
 
-        ws.onopen = () => {
-          console.log('WebSocket connected successfully');
-          setOnline(true);
-          setDemoMode(false);
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            console.log('Received WebSocket data:', data);
-            
-            // Detect price changes for flash animation
-            Object.keys(data).forEach(symbol => {
-              if (market[symbol] && market[symbol].price !== data[symbol].price) {
-                const isUp = data[symbol].price > market[symbol].price;
-                setPriceFlashes(prev => ({
-                  ...prev,
-                  [symbol]: { flash: true, isUp }
-                }));
-                
-                // Clear flash after 600ms
-                setTimeout(() => {
-                  setPriceFlashes(prev => ({
-                    ...prev,
-                    [symbol]: { flash: false, isUp: prev[symbol]?.isUp || isUp }
-                  }));
-                }, 600);
-              }
-            });
-            
-            setMarket(data);
-          } catch (error) {
-            console.error('Error parsing WebSocket message:', error);
-          }
-        };
-
-        ws.onclose = (event) => {
-          console.log('WebSocket disconnected:', event.code, event.reason);
-          setOnline(false);
-          // Reconnect every 5 seconds
-          setTimeout(connectWebSocket, 5000);
-        };
-
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          setOnline(false);
-          setDemoMode(true);
-          
-          // Fallback to polling if WebSocket fails
-          console.log('Falling back to HTTP polling');
-          startPolling();
-        };
-
-      } catch (error) {
-        console.error('Failed to connect WebSocket:', error);
-        setOnline(false);
-        setDemoMode(true);
-        startPolling();
-      }
-    };
-
+  useEffect(() => {
     const startPolling = () => {
+      if (pollingRef.current) {
+        return;
+      }
+
       const pollData = async () => {
         try {
           const response = await fetch(`${API}/market`);
           if (response.ok) {
             const data = await response.json();
             setMarket(data);
-            setDemoMode(false);
           }
         } catch (error) {
-          console.error('Polling error:', error);
+          console.error("Polling error:", error);
         }
       };
 
-      pollData(); // Initial fetch
-      const pollingInterval = setInterval(pollData, 15000); // Poll every 15 seconds
-      
-      return () => clearInterval(pollingInterval);
+      pollData();
+      pollingRef.current = setInterval(pollData, 15000);
+    };
+
+    const stopPolling = () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+
+    const connectWebSocket = () => {
+      try {
+        const wsUrl =
+          window.location.protocol === "https:"
+            ? "wss://localhost:8000/ws/market"
+            : "ws://localhost:8000/ws/market";
+
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          stopPolling();
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            const previousMarket = marketRef.current;
+
+            Object.keys(data).forEach((symbol) => {
+              if (previousMarket[symbol] && previousMarket[symbol].price !== data[symbol].price) {
+                const isUp = data[symbol].price > previousMarket[symbol].price;
+                setPriceFlashes((prev) => ({
+                  ...prev,
+                  [symbol]: { flash: true, isUp },
+                }));
+
+                window.setTimeout(() => {
+                  setPriceFlashes((prev) => ({
+                    ...prev,
+                    [symbol]: { flash: false, isUp: prev[symbol]?.isUp ?? isUp },
+                  }));
+                }, 600);
+              }
+            });
+
+            setMarket(data);
+          } catch (error) {
+            console.error("Error parsing WebSocket message:", error);
+          }
+        };
+
+        ws.onclose = () => {
+          startPolling();
+          window.setTimeout(connectWebSocket, 5000);
+        };
+
+        ws.onerror = () => {
+          startPolling();
+        };
+      } catch (error) {
+        console.error("WebSocket connection failed:", error);
+        startPolling();
+      }
     };
 
     connectWebSocket();
 
     return () => {
+      stopPolling();
       if (wsRef.current) {
         wsRef.current.close();
       }
     };
   }, []);
 
-  // Fetch market summary for status
   useEffect(() => {
     const fetchMarketSummary = async () => {
       try {
@@ -163,10 +167,14 @@ const Dashboard = () => {
         if (response.ok) {
           const data = await response.json();
           setMarketStatus(data.status);
-          setLastUpdated(new Date(data.last_updated).toLocaleTimeString('en-IN'));
+          setDataSource(data.data_source || "fallback");
+          setLastUpdated(new Date(data.last_updated).toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }));
         }
       } catch (error) {
-        console.error('Failed to fetch market summary:', error);
+        console.error("Failed to fetch market summary:", error);
       }
     };
 
@@ -175,258 +183,312 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch intraday history for active chart
   useEffect(() => {
     const fetchIntradayHistory = async () => {
       try {
-        const response = await fetch(`${API}/history/${activeChart}?interval=1m`);
+        const response = await fetch(`${API}/history/${activeMeta.apiSymbol}?interval=1m`);
         if (response.ok) {
           const data = await response.json();
-          setHistory(prev => ({ ...prev, [activeChart]: data }));
+          setHistory((prev) => ({ ...prev, [activeMeta.apiSymbol]: data }));
         }
       } catch (error) {
-        console.error('Failed to fetch intraday data:', error);
+        console.error("Failed to fetch intraday data:", error);
       }
     };
 
     fetchIntradayHistory();
-  }, [activeChart]);
+  }, [activeMeta.apiSymbol]);
 
-  useEffect(() => { 
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); 
-  }, [messages, loading]);
-
-  async function sendQ(q) {
-    const question = (q || input).trim();
-    if (!question || loading) return;
-    setInput("");
-    setMessages(p => [...p, { role: "user", content: question, context: "" }]);
-    setLoading(true);
-    try {
-      const r = await fetch(`${API}/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question })
-      });
-      const d = await r.json();
-      setMessages(p => [...p, { role: "assistant", content: d.answer, context: d.sources || "" }]);
-    } catch (e) {
-      setMessages(p => [...p, { role: "assistant", content: "Service temporarily unavailable. Please try again.", context: "" }]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const formatVolume = (volume) => {
-    if (volume >= 1000000) {
-      return `${(volume / 1000000).toFixed(1)}M`;
-    } else if (volume >= 1000) {
-      return `${(volume / 1000).toFixed(1)}K`;
-    }
-    return volume.toString();
-  };
+  const trackedCount = Object.keys(market).length;
+  const positiveCount = Object.values(market).filter((item) => (item?.change_pct ?? 0) >= 0).length;
+  const negativeCount = Math.max(trackedCount - positiveCount, 0);
+  const movers = Object.entries(market)
+    .sort(([, a], [, b]) => Math.abs(b?.change_pct ?? 0) - Math.abs(a?.change_pct ?? 0))
+    .slice(0, 3);
 
   return (
-    <div style={{ 
-      minHeight: "100vh", 
-      background: "#020817", 
-      color: "#e2e8f0", 
-      fontFamily: "'IBM Plex Mono','Courier New',monospace", 
-      display: "flex", 
-      flexDirection: "column",
-      marginLeft: "250px" // Account for sidebar
-    }}>
-      
-      {/* Live Status Bar */}
-      <div style={{
-        background: "rgba(13,17,23,0.8)",
-        borderBottom: "1px solid #1e293b",
-        padding: "12px 20px",
-        display: "flex",
-        alignItems: "center",
-        gap: "20px"
-      }}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "8px"
-        }}>
-          <div style={{
-            width: "8px",
-            height: "8px",
-            borderRadius: "50%",
-            background: marketStatus === "OPEN" ? "#10b981" : "#ef4444",
-            boxShadow: marketStatus === "OPEN" ? "0 0 6px rgba(16,185,129,0.5)" : "0 0 6px rgba(239,68,68,0.5)",
-            animation: marketStatus === "OPEN" ? "pulse 2s infinite" : "none"
-          }} />
-          <div style={{
-            fontSize: "11px",
-            fontWeight: "600",
-            color: marketStatus === "OPEN" ? "#10b981" : "#ef4444",
-            letterSpacing: "1px"
-          }}>
-            NSE {marketStatus}
-          </div>
-        </div>
-        
-        <div style={{
-          fontSize: "10px",
-          color: "#94a3b8",
-          letterSpacing: "1px"
-        }}>
-          Last updated: {lastUpdated}
-        </div>
-        
-        <div style={{
-          fontSize: "10px",
-          color: "#334155",
-          letterSpacing: "1px"
-        }}>
-          {Object.keys(market).length} instruments tracked
-        </div>
-      </div>
+    <div
+      style={{
+        minHeight: "100vh",
+        marginLeft: "250px",
+        padding: "28px",
+        background:
+          "radial-gradient(circle at top left, rgba(14,116,144,0.16), transparent 32%), radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 28%), #020817",
+        color: "#e2e8f0",
+        fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+      }}
+    >
+      <div style={{ maxWidth: 1500, margin: "0 auto" }}>
+        <div style={{ ...panelStyle, padding: 24, marginBottom: 24 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 20,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={sectionEyebrow}>Live Dashboard</div>
+              <h1 style={{ margin: "10px 0 8px", fontSize: "clamp(28px, 4vw, 40px)", lineHeight: 1.1 }}>
+                Cleaner, calmer market monitoring
+              </h1>
+              <p style={{ margin: 0, color: "#94a3b8", maxWidth: 680, lineHeight: 1.7, fontSize: 14 }}>
+                Prioritized cards, a larger chart surface, and a tighter indicator rail make the dashboard easier
+                to scan at a glance.
+              </p>
+            </div>
 
-      {/* Demo Mode Badge */}
-      {demoMode && (
-        <div style={{
-          background: "#f59e0b",
-          color: "#000",
-          padding: "8px 16px",
-          fontSize: "10px",
-          fontWeight: "600",
-          letterSpacing: "1px",
-          textAlign: "center",
-          borderBottom: "1px solid #1e293b"
-        }}>
-          DEMO MODE - Backend Offline
-        </div>
-      )}
-      
-      {/* Main Content */}
-      <div style={{ flex: 1, display: "flex", padding: "20px" }}>
-        {/* Left - Market Overview */}
-        <div style={{ flex: 1, paddingRight: "20px" }}>
-          <div style={{ fontSize: 12, color: "#334155", letterSpacing: 2, marginBottom: 16, fontFamily: "monospace" }}>MARKET OVERVIEW</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-            {Object.entries(market).map(([name, data]) => (
-              <TickerCard
-                key={name}
-                name={name}
-                data={data}
-                meta={TICKER_META[name]}
-                selected={activeTk === name}
-                onClick={() => { setActiveChart(name === "NSEI" ? "NSEI" : name === "BSESN" ? "BSESN" : name); setActiveTk(name); }}
-                sparkVals={history[name]?.slice(-20).map(d => d.close) || []}
-                priceFlash={priceFlashes[name]}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Center - Chart */}
-        <div style={{ flex: 1, padding: "0 20px" }}>
-          <div style={{ fontSize: 12, color: "#334155", letterSpacing: 2, marginBottom: 16, fontFamily: "monospace" }}>CHARTS</div>
-          
-          {/* Chart Options */}
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            {chartOptions.map(o => (
-              <button key={o.key} onClick={() => { setActiveChart(o.key); setActiveTk(o.key === "NSEI" ? "NIFTY50" : "SENSEX"); }}
-                style={{ background: activeChart === o.key ? "rgba(16,185,129,0.1)" : "transparent", border: `1px solid ${activeChart === o.key ? "#10b981" : "#1e293b"}`, color: activeChart === o.key ? "#10b981" : "#475569", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontSize: 12, letterSpacing: 1, fontFamily: "monospace", transition: "all 0.15s" }}>
-                {o.label}
-              </button>
-            ))}
+            <div
+              style={{
+                minWidth: 280,
+                padding: 18,
+                borderRadius: 18,
+                border: "1px solid rgba(148,163,184,0.12)",
+                background: "rgba(2,6,23,0.42)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: "50%",
+                    background: marketStatus === "OPEN" ? "#22c55e" : "#f87171",
+                    boxShadow:
+                      marketStatus === "OPEN"
+                        ? "0 0 14px rgba(34,197,94,0.45)"
+                        : "0 0 14px rgba(248,113,113,0.35)",
+                  }}
+                />
+                <span style={{ fontSize: 12, color: "#cbd5e1", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                  Market {marketStatus}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                    Updated
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 16, color: "#f8fafc", fontWeight: 600 }}>{lastUpdated || "--:--"}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                    Tracked
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 16, color: "#f8fafc", fontWeight: 600 }}>{trackedCount}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                    Leaders
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 16, color: "#22c55e", fontWeight: 600 }}>{positiveCount}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                    Source
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 16, color: dataSource === "live" ? "#38bdf8" : "#fbbf24", fontWeight: 600 }}>
+                    {dataSource.toUpperCase()}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Chart */}
-          <div style={{ background: "rgba(13,17,23,0.8)", border: "1px solid #0f172a", borderRadius: 12, padding: 20, marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: "#334155", letterSpacing: 2, marginBottom: 16, fontFamily: "monospace" }}>{activeTk.toUpperCase()} · {TICKER_META[activeTk]?.sub}</div>
-            <AreaChart history={history[activeChart] || []} />
-          </div>
-
-          {/* Indicators */}
-          <div style={{ fontSize: 12, color: "#334155", letterSpacing: 2, marginBottom: 16, fontFamily: "monospace" }}>ECONOMIC INDICATORS</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-            {INDICATORS.map((ind, i) => (
-              <div key={i} style={{ background: "rgba(13,17,23,0.8)", border: "1px solid #0f172a", borderRadius: 8, padding: 16 }}>
-                <div style={{ fontSize: 10, color: "#334155", letterSpacing: 1.5, marginBottom: 8 }}>{ind.label}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", fontFamily: "monospace" }}>{ind.value}</div>
-                <div style={{ fontSize: 10, color: "#475569", fontFamily: "monospace", marginTop: 4 }}>{ind.note}</div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 14,
+              marginTop: 20,
+            }}
+          >
+            {SUMMARY_ITEMS.map((item) => (
+              <div
+                key={item.key}
+                style={{
+                  borderRadius: 18,
+                  border: "1px solid rgba(148,163,184,0.1)",
+                  background: "rgba(6,11,24,0.72)",
+                  padding: "16px 18px",
+                }}
+              >
+                <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.16em" }}>
+                  {item.label}
+                </div>
+                <div style={{ marginTop: 10, fontSize: 22, color: "#f8fafc", fontWeight: 700 }}>{item.value}</div>
               </div>
             ))}
+            <div
+              style={{
+                borderRadius: 18,
+                border: "1px solid rgba(148,163,184,0.1)",
+                background: "rgba(6,11,24,0.72)",
+                padding: "16px 18px",
+              }}
+            >
+              <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.16em" }}>
+                Breadth
+              </div>
+              <div style={{ marginTop: 10, fontSize: 22, color: "#f8fafc", fontWeight: 700 }}>
+                {positiveCount} / {negativeCount}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Right - Chat */}
-        <div style={{ flex: 1, paddingLeft: "20px", maxWidth: 400 }}>
-          <div style={{ fontSize: 12, color: "#334155", letterSpacing: 2, marginBottom: 16, fontFamily: "monospace" }}>AI ADVISOR</div>
-          
-          {/* Tabs */}
-          <div style={{ display: "flex", borderBottom: "1px solid #0f172a", marginBottom: 16 }}>
-            {[{ k: "chat", l: "CHAT" }, { k: "quick", l: "QUICK ASK" }].map(t => (
-              <button key={t.k} onClick={() => setTab(t.k)} style={{ flex: 1, padding: "12px 0", fontSize: 10, letterSpacing: 1.5, fontFamily: "monospace", cursor: "pointer", border: "none", background: "transparent", color: tab === t.k ? "#10b981" : "#334155", borderBottom: `2px solid ${tab === t.k ? "#10b981" : "transparent"}`, transition: "all 0.15s" }}>
-                {t.l}
-              </button>
-            ))}
-          </div>
+        <div className="dashboard-grid">
+          <section style={{ ...panelStyle, padding: 22 }}>
+            <div style={{ ...sectionEyebrow, marginBottom: 16 }}>Market Overview</div>
+            <div style={{ display: "grid", gap: 14 }}>
+              {INSTRUMENTS.map((instrument) => (
+                <TickerCard
+                  key={instrument.key}
+                  name={instrument.key}
+                  data={market[instrument.key]}
+                  meta={instrument}
+                  selected={activeTicker === instrument.key}
+                  onClick={() => setActiveTicker(instrument.key)}
+                  sparkVals={history[instrument.apiSymbol]?.slice(-20).map((point) => point.close) || []}
+                  priceFlash={priceFlashes[instrument.key]}
+                />
+              ))}
+            </div>
+          </section>
 
-          <div style={{ background: "rgba(13,17,23,0.8)", border: "1px solid #0f172a", borderRadius: 12, height: "500px", display: "flex", flexDirection: "column" }}>
-            {tab === "chat" && (
-              <>
-                <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-                  {messages.map((m, i) => <ChatBubble key={i} msg={m} />)}
-                  {loading && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-                      <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg,#0f766e,#1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 700 }}>AI</div>
-                      <div style={{ background: "rgba(30,41,59,0.9)", border: "1px solid #1e293b", borderRadius: "3px 14px 14px 14px", padding: "10px 14px", display: "flex", gap: 5, alignItems: "center" }}>
-                        {[0, 1, 2].map(i => (
-                          <div key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: "#10b981", animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div ref={chatEndRef} />
+          <section style={{ display: "grid", gap: 18 }}>
+            <div style={{ ...panelStyle, padding: 22 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 16,
+                  flexWrap: "wrap",
+                  marginBottom: 18,
+                }}
+              >
+                <div>
+                  <div style={sectionEyebrow}>Focused Chart</div>
+                  <div style={{ marginTop: 8, fontSize: 26, fontWeight: 700, color: "#f8fafc" }}>{activeMeta.label}</div>
                 </div>
-                <div style={{ padding: 16, borderTop: "1px solid #0f172a" }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && sendQ()}
-                      placeholder="Ask about Indian markets..."
-                      style={{ flex: 1, background: "rgba(30,41,59,0.8)", border: "1px solid #1e293b", borderRadius: 8, color: "#e2e8f0", padding: "10px 12px", fontSize: 12, fontFamily: "monospace", outline: "none" }} />
-                    <button onClick={() => sendQ()} disabled={loading || !input.trim()}
-                      style={{ background: loading || !input.trim() ? "#0f172a" : "linear-gradient(135deg,#0f766e,#1d4ed8)", border: "1px solid #1e293b", color: loading || !input.trim() ? "#334155" : "#fff", borderRadius: 8, width: 40, cursor: loading || !input.trim() ? "not-allowed" : "pointer", fontSize: 16 }}>{">"}</button>
-                  </div>
-                  <div style={{ fontSize: 9, color: "#1e293b", fontFamily: "monospace", textAlign: "center", marginTop: 8 }}>GROQ LLaMA 3 · CHROMADB RAG · YFINANCE</div>
-                </div>
-              </>
-            )}
-
-            {tab === "quick" && (
-              <div style={{ padding: 16, flex: 1, overflowY: "auto" }}>
-                <div style={{ fontSize: 10, color: "#334155", letterSpacing: 1.5, marginBottom: 16, fontFamily: "monospace" }}>TAP TO ASK</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {QUICK_QS.map((q, i) => (
-                    <button key={i} onClick={() => { setTab("chat"); sendQ(q); }} style={{ background: "rgba(30,41,59,0.8)", border: "1px solid #1e293b", borderRadius: 8, color: "#94a3b8", padding: "12px 16px", textAlign: "left", cursor: "pointer", fontSize: 11, fontFamily: "monospace", lineHeight: 1.5, transition: "all 0.15s" }} onMouseOver={e => { e.currentTarget.style.borderColor = "#10b981"; e.currentTarget.style.color = "#e2e8f0"; }} onMouseOut={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#94a3b8"; }}>
-                      <span style={{ color: "#10b981", marginRight: 8, fontSize: 10 }}>{">"}</span>{q}
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {INSTRUMENTS.map((instrument) => (
+                    <button
+                      key={instrument.key}
+                      onClick={() => setActiveTicker(instrument.key)}
+                      style={{
+                        border: activeTicker === instrument.key ? "1px solid #38bdf8" : "1px solid rgba(148,163,184,0.14)",
+                        background: activeTicker === instrument.key ? "rgba(56,189,248,0.12)" : "rgba(2,6,23,0.5)",
+                        color: activeTicker === instrument.key ? "#e0f2fe" : "#94a3b8",
+                        borderRadius: 999,
+                        padding: "9px 14px",
+                        cursor: "pointer",
+                        fontSize: 11,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {instrument.code}
                     </button>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
+
+              <AdvancedTradingChart history={activeHistory} symbol={`${activeMeta.label} | ${activeMeta.venue}`} />
+            </div>
+
+            <div style={{ ...panelStyle, padding: 22 }}>
+              <div style={{ ...sectionEyebrow, marginBottom: 16 }}>Quick Movers</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+                {movers.map(([key, data]) => {
+                  const meta = TICKER_META[key];
+                  const positive = (data?.change_pct ?? 0) >= 0;
+                  return (
+                    <div
+                      key={key}
+                      style={{
+                        borderRadius: 18,
+                        border: "1px solid rgba(148,163,184,0.1)",
+                        background: "rgba(4,9,20,0.66)",
+                        padding: 16,
+                      }}
+                    >
+                      <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+                        {meta?.label || key}
+                      </div>
+                      <div style={{ marginTop: 10, fontSize: 24, fontWeight: 700, color: "#f8fafc" }}>
+                        {data?.price?.toLocaleString("en-IN", { maximumFractionDigits: 2 }) || "--"}
+                      </div>
+                      <div style={{ marginTop: 8, color: positive ? "#34d399" : "#f87171", fontSize: 13, fontWeight: 600 }}>
+                        {positive ? "+" : ""}
+                        {data?.change_pct?.toFixed(2) || "0.00"}%
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <aside style={{ ...panelStyle, padding: 22 }}>
+            <div style={{ ...sectionEyebrow, marginBottom: 16 }}>Economic Indicators</div>
+            <div style={{ display: "grid", gap: 12 }}>
+              {INDICATORS.map((indicator) => (
+                <div
+                  key={indicator.label}
+                  style={{
+                    padding: 18,
+                    borderRadius: 18,
+                    border: "1px solid rgba(148,163,184,0.08)",
+                    background: "rgba(4,9,20,0.66)",
+                  }}
+                >
+                  <div style={{ color: "#64748b", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    {indicator.label}
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 20, fontWeight: 700, color: "#f8fafc" }}>{indicator.value}</div>
+                  <div style={{ marginTop: 8, color: "#94a3b8", fontSize: 12, lineHeight: 1.5 }}>{indicator.note}</div>
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap');
-        @keyframes bounce { 0%,80%,100%{transform:scale(0.7);opacity:0.4} 40%{transform:scale(1);opacity:1} }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        *{box-sizing:border-box;margin:0;padding:0}
-        ::-webkit-scrollbar{width:3px;height:3px}
-        ::-webkit-scrollbar-track{background:#020817}
-        ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
-        body{background:#020817}
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+        .dashboard-grid {
+          display: grid;
+          grid-template-columns: minmax(320px, 0.95fr) minmax(540px, 1.55fr) minmax(260px, 0.75fr);
+          gap: 20px;
+          align-items: start;
+        }
+
+        @media (max-width: 1320px) {
+          .dashboard-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 900px) {
+          body {
+            overflow-x: hidden;
+          }
+        }
+
+        @media (max-width: 760px) {
+          .dashboard-grid {
+            gap: 16px;
+          }
+        }
       `}</style>
     </div>
   );
-};
+}
 
 export default Dashboard;
