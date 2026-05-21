@@ -37,29 +37,51 @@ if not exist "venv" (
 
 echo.
 echo [4/6] Activating virtual environment and installing backend dependencies...
-call venv\Scripts\activate.bat
+call "%~dp0venv\Scripts\activate.bat"
 
-echo Installing backend dependencies...
-pip install -r requirements.txt
+echo Installing backend dependencies from requirements.txt...
+pip install -r "%~dp0requirements.txt"
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install root requirements. Trying backend-specific requirements...
+    pip install -r "%~dp0backend\requirements.txt"
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to install backend dependencies
+        pause
+        exit /b 1
+    )
+)
 
 echo.
 echo [5/6] Installing frontend dependencies...
-cd frontend
+cd /d "%~dp0frontend"
 echo Installing npm packages...
 npm install
-cd ..
+if %errorlevel% neq 0 (
+    echo ERROR: Failed to install frontend dependencies
+    pause
+    exit /b 1
+)
+cd /d "%~dp0"
 
 echo.
 echo [6/6] Setting up environment variables...
-if not exist "backend\.env" (
-    echo Creating .env file template...
-    echo # Groq API Key - Get your key from https://console.groq.com/ > backend\.env
-    echo GROQ_API_KEY=your_groq_api_key_here >> backend\.env
+if not exist "%~dp0backend\.env" (
+    echo Creating .env file from template...
+    echo GROQ_API_KEY=your_groq_api_key_here > "%~dp0backend\.env"
+    echo JWT_SECRET=change-this-to-a-long-random-secret-string >> "%~dp0backend\.env"
     echo.
-    echo IMPORTANT: Edit backend\.env and add your Groq API key
-    echo Get your free API key from: https://console.groq.com/
+    echo IMPORTANT: Edit backend\.env and fill in your values:
+    echo   - GROQ_API_KEY: Get your free key from https://console.groq.com/
+    echo   - JWT_SECRET:   Change to a long random secret string
 ) else (
     echo .env file already exists
+    echo Checking for required keys...
+    findstr /C:"JWT_SECRET" "%~dp0backend\.env" >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo Adding missing JWT_SECRET to .env...
+        echo JWT_SECRET=change-this-to-a-long-random-secret-string >> "%~dp0backend\.env"
+        echo WARNING: Please update JWT_SECRET in backend\.env with a secure value!
+    )
 )
 
 echo.
@@ -68,13 +90,15 @@ echo    Setup Complete!
 echo ========================================
 echo.
 echo Next steps:
-echo 1. Edit backend\.env and add your Groq API key
-echo 2. Run start-all.bat to start the application
+echo 1. Edit backend\.env and set your GROQ_API_KEY and JWT_SECRET
+echo 2. Run start-all.bat to start both servers
 echo 3. Open http://localhost:3000 in your browser
 echo.
 echo Available commands:
-echo - setup.bat: Install all dependencies
-echo - start-all.bat: Start both backend and frontend servers
+echo - setup.bat        : Install all dependencies
+echo - start-all.bat    : Start backend + frontend together
+echo - start-backend.bat: Start only the backend server
+echo - start-frontend.bat: Start only the frontend server
 echo.
 echo Press any key to exit...
 pause >nul
