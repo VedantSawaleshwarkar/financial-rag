@@ -104,7 +104,7 @@ const Advisor = () => {
       color: "#e2e8f0", 
       fontFamily: "'IBM Plex Mono','Courier New',monospace",
       display: "flex",
-      marginLeft: "250px" // Account for sidebar
+      marginLeft: "var(--app-shell-offset, 250px)" // Account for sidebar
     }}>
       
       {/* Left Sidebar - Quick Questions */}

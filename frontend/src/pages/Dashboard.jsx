@@ -210,7 +210,7 @@ function Dashboard() {
     <div
       style={{
         minHeight: "100vh",
-        marginLeft: "250px",
+        marginLeft: "var(--app-shell-offset, 250px)",
         padding: "28px",
         background:
           "radial-gradient(circle at top left, rgba(14,116,144,0.16), transparent 32%), radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 28%), #020817",

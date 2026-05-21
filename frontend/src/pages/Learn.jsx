@@ -113,7 +113,7 @@ function Learn() {
     <div
       style={{
         minHeight: "100vh",
-        marginLeft: "250px",
+        marginLeft: "var(--app-shell-offset, 250px)",
         padding: "28px",
         background:
           "radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 28%), radial-gradient(circle at top right, rgba(34,197,94,0.08), transparent 24%), #020817",

@@ -1,11 +1,14 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
 import json
 from datetime import datetime
-from market_data import get_all_prices, get_history, get_market_summary, price_cache, SYMBOLS
+from typing import Optional
+from market_data import get_all_prices, get_history, get_market_summary, get_top_stocks, price_cache, SYMBOLS
 from rag_engine import init_knowledge_base, ask_rag
+import auth as auth_module
+import jwt
 
 app = FastAPI(title="FinAI RAG Backend")
 
@@ -23,6 +26,7 @@ active_connections = []
 @app.on_event("startup")
 def startup():
     init_knowledge_base()
+    auth_module.init_db()
 
 @app.websocket("/ws/market")
 async def websocket_endpoint(websocket: WebSocket):
@@ -87,6 +91,64 @@ def history(symbol: str, period: str = "1mo", interval: str = "1d"):
 @app.get("/symbols")
 def symbols():
     return SYMBOLS
+
+
+@app.get("/top-stocks")
+def top_stocks(limit: int = 30):
+    return {
+        "items": get_top_stocks(limit=min(max(limit, 1), 30)),
+        "market_status": get_market_summary()["status"],
+        "last_updated": datetime.now().isoformat(),
+    }
+
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+class SignupRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/signup")
+def signup(req: SignupRequest):
+    try:
+        user = auth_module.create_user(req.name, req.email, req.password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    token = auth_module.create_token(user["id"], user["email"], user["name"])
+    return {"token": token, "user": user}
+
+@app.post("/auth/login")
+def login(req: LoginRequest):
+    try:
+        user = auth_module.authenticate_user(req.email, req.password)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    token = auth_module.create_token(user["id"], user["email"], user["name"])
+    return {"token": token, "user": user}
+
+@app.get("/auth/me")
+def me(authorization: Optional[str] = Header(None)):
+    """Validate token and return current user info."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing token")
+    token = authorization[7:]
+    try:
+        payload = auth_module.decode_token(token)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = auth_module.get_user_by_id(int(payload["sub"]))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+# ── RAG route ──────────────────────────────────────────────────────────────────
 
 class AskRequest(BaseModel):
     question: str

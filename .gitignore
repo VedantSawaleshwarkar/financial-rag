@@ -92,3 +92,7 @@ jspm_packages/
 
 # Database stores
 chroma_store/
+*.db
+
+# Python virtual environment
+venv/

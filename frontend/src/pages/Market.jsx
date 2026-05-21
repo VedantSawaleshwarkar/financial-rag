@@ -307,7 +307,7 @@ const Market = () => {
       background: "#020817", 
       color: "#e2e8f0", 
       fontFamily: "'IBM Plex Mono','Courier New',monospace",
-      marginLeft: "250px" // Account for sidebar
+      marginLeft: "var(--app-shell-offset, 250px)" // Account for sidebar
     }}>
       
       {/* Demo Mode Badge */}
