@@ -29,6 +29,7 @@ httpx==0.25.2
 
 # Additional utilities
 python-multipart==0.0.6
+PyPDF2==3.0.1
 
 # Core Python modules (built-in, no installation needed)
 # asyncio - Used for async operations
