@@ -108,6 +108,56 @@ const CHOICES = [
   },
 ];
 
+const RAG_PIPELINE = [
+  {
+    phase: "1. Knowledge Base",
+    description: "Financial knowledge documents are stored in ChromaDB as text embeddings",
+    details: [
+      "Static knowledge: RBI policies, market trends, investment principles",
+      "Dynamic knowledge: User-uploaded bank statements (PDFs)",
+      "Text is chunked into 500-character segments for better retrieval",
+      "Each chunk is converted to a 384-dimensional vector embedding"
+    ]
+  },
+  {
+    phase: "2. Query Processing",
+    description: "User questions are converted to embeddings for semantic search",
+    details: [
+      "Question text is embedded using the same model as the knowledge base",
+      "Embedding captures semantic meaning, not just keywords",
+      "Query embedding is compared against all stored document embeddings"
+    ]
+  },
+  {
+    phase: "3. Retrieval",
+    description: "Most relevant document chunks are retrieved from ChromaDB",
+    details: [
+      "Cosine similarity finds the closest matching embeddings",
+      "Top 3 most relevant chunks are retrieved for each query",
+      "Retrieved chunks serve as context for the LLM"
+    ]
+  },
+  {
+    phase: "4. Context Augmentation",
+    description: "Retrieved context is combined with real-time market data",
+    details: [
+      "Live market prices are fetched from Yahoo Finance",
+      "Market snapshot is formatted and added to the prompt",
+      "This ensures answers are grounded in current market conditions"
+    ]
+  },
+  {
+    phase: "5. Generation",
+    description: "LLM generates response using retrieved context and market data",
+    details: [
+      "Groq API (Llama 3.1 8B) provides fast inference when API key is available",
+      "Fallback mode uses template-based responses when API is unavailable",
+      "Response is constrained to 3-4 sentences with actionable insights",
+      "Sources are cited as [Source 1], [Source 2], etc."
+    ]
+  }
+];
+
 function Learn() {
   return (
     <div
@@ -300,6 +350,7 @@ function Learn() {
             borderRadius: 24,
             border: "1px solid rgba(148,163,184,0.12)",
             background: "rgba(15,23,42,0.72)",
+            marginBottom: 24,
           }}
         >
           <div style={{ fontSize: 11, color: "#7c8aa5", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 16 }}>
@@ -318,6 +369,80 @@ function Learn() {
               >
                 <div style={{ color: "#f8fafc", fontSize: 14, fontWeight: 700, marginBottom: 8 }}>{choice.title}</div>
                 <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.65 }}>{choice.text}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          style={{
+            padding: 28,
+            borderRadius: 24,
+            border: "1px solid rgba(167,139,250,0.2)",
+            background: "linear-gradient(180deg, rgba(15,23,42,0.9), rgba(5,10,21,0.96))",
+          }}
+        >
+          <div style={{ fontSize: 11, color: "#a78bfa", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 20 }}>
+            RAG Pipeline Deep Dive
+          </div>
+          <div style={{ color: "#f8fafc", fontSize: 20, fontWeight: 700, marginBottom: 12 }}>
+            How Retrieval-Augmented Generation Works
+          </div>
+          <p style={{ color: "#94a3b8", fontSize: 14, lineHeight: 1.7, marginBottom: 24, maxWidth: 800 }}>
+            The RAG (Retrieval-Augmented Generation) pipeline combines information retrieval with large language model generation to provide accurate, context-aware financial advice. Here's how each phase works:
+          </p>
+          
+          <div style={{ display: "grid", gap: 20 }}>
+            {RAG_PIPELINE.map((item, index) => (
+              <div
+                key={item.phase}
+                style={{
+                  padding: 24,
+                  borderRadius: 20,
+                  border: "1px solid rgba(167,139,250,0.15)",
+                  background: "rgba(2,6,23,0.5)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 12,
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(167,139,250,0.2)",
+                      color: "#a78bfa",
+                      fontWeight: 700,
+                      fontSize: 14,
+                    }}
+                  >
+                    {index + 1}
+                  </div>
+                  <div style={{ color: "#f8fafc", fontSize: 16, fontWeight: 700 }}>{item.phase}</div>
+                </div>
+                <div style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>
+                  {item.description}
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {item.details.map((detail) => (
+                    <div
+                      key={detail}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 10,
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        background: "rgba(167,139,250,0.08)",
+                        border: "1px solid rgba(167,139,250,0.1)",
+                      }}
+                    >
+                      <div style={{ color: "#a78bfa", fontSize: 10, marginTop: 2 }}>→</div>
+                      <div style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.6 }}>{detail}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

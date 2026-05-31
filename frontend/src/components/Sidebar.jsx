@@ -11,6 +11,7 @@ function Sidebar({ isAuthenticated, collapsed = false }) {
     { path: "/portfolio", label: "Portfolio", icon: "PF" },
     { path: "/market", label: "Market", icon: "MK" },
     { path: "/top-stocks", label: "Top 30", icon: "T30" },
+    { path: "/upload", label: "Upload", icon: "UP" },
     { path: "/learn", label: "Learn", icon: "LN" },
   ];
 

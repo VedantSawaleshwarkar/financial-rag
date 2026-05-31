@@ -13,6 +13,7 @@ import Market from "./pages/Market";
 import Portfolio from "./pages/Portfolio";
 import Signup from "./pages/Signup";
 import TopStocks from "./pages/TopStocks";
+import Upload from "./pages/Upload";
 
 function AppShell() {
   const location = useLocation();
@@ -92,6 +93,14 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <TopStocks />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/upload"
+          element={
+            <ProtectedRoute>
+              <Upload />
             </ProtectedRoute>
           }
         />

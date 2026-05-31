@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Header, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import asyncio
@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from typing import Optional
 from market_data import get_all_prices, get_history, get_market_summary, get_top_stocks, price_cache, SYMBOLS
-from rag_engine import init_knowledge_base, ask_rag
+from rag_engine import init_knowledge_base, ask_rag, extract_text_from_pdf, add_document_to_kb, get_financial_recommendations
 import auth as auth_module
 import jwt
 
@@ -161,6 +161,67 @@ def ask(req: AskRequest):
         for k, v in prices.items()
     ])
     return ask_rag(req.question, snapshot)
+
+# ── PDF Upload route ───────────────────────────────────────────────────────────
+
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    """Upload a PDF bank statement and add it to the RAG knowledge base."""
+    # Validate file type
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    
+    try:
+        # Extract text from PDF
+        pdf_text = extract_text_from_pdf(file.file)
+        
+        if not pdf_text.strip():
+            raise HTTPException(status_code=400, detail="No text could be extracted from the PDF")
+        
+        # Add to knowledge base
+        result = add_document_to_kb(pdf_text, doc_id=f"bank_statement_{file.filename}")
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["message"])
+        
+        return {
+            "success": True,
+            "message": "Bank statement uploaded and processed successfully",
+            "doc_id": result["doc_id"],
+            "chunks_added": result["chunks_added"],
+            "filename": file.filename
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"Error processing PDF upload: {e}")
+        raise HTTPException(status_code=500, detail="Failed to process PDF file")
+
+# ── Financial Recommendations route ─────────────────────────────────────────────
+
+@app.get("/recommendations")
+def recommendations():
+    """Generate personalized financial recommendations based on uploaded bank statement data."""
+    try:
+        recommendations = get_financial_recommendations()
+        return recommendations
+    except Exception as e:
+        print(f"Error generating recommendations: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate recommendations")
+
+@app.get("/has-uploaded-documents")
+def has_uploaded_documents():
+    """Check if any bank statements have been uploaded."""
+    try:
+        from rag_engine import col
+        # Check if there are any documents with "bank_statement" in their ID
+        all_docs = col.get()
+        has_bank_statements = any("bank_statement" in doc_id for doc_id in all_docs["ids"])
+        return {"has_uploaded": has_bank_statements, "total_documents": len(all_docs["ids"])}
+    except Exception as e:
+        print(f"Error checking uploaded documents: {e}")
+        return {"has_uploaded": False, "total_documents": 0}
 
 # Background task to fetch data periodically
 async def periodic_data_fetch():

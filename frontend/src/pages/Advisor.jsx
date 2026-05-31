@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import ChatBubble from "../components/ChatBubble";
+import FinancialRecommendations from "../components/FinancialRecommendations";
 
 const API = "http://localhost:8000";
 
@@ -37,6 +38,8 @@ const Advisor = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [online, setOnline] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [hasUploadedDocuments, setHasUploadedDocuments] = useState(false);
     const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -50,8 +53,23 @@ const Advisor = () => {
       }
     };
     
+    // Check if bank statements have been uploaded
+    const checkUploadedDocuments = async () => {
+      try {
+        const response = await fetch(`${API}/has-uploaded-documents`);
+        const data = await response.json();
+        setHasUploadedDocuments(data.has_uploaded);
+      } catch {
+        setHasUploadedDocuments(false);
+      }
+    };
+    
     checkBackend();
-    const interval = setInterval(checkBackend, 30000);
+    checkUploadedDocuments();
+    const interval = setInterval(() => {
+      checkBackend();
+      checkUploadedDocuments();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -164,6 +182,56 @@ const Advisor = () => {
             ))}
           </div>
         </div>
+
+        {/* Personalized Recommendations */}
+        {hasUploadedDocuments ? (
+          <div>
+            <button
+              onClick={() => setShowRecommendations(!showRecommendations)}
+              style={{
+                width: "100%",
+                background: showRecommendations ? "rgba(167,139,250,0.2)" : "rgba(30,41,59,0.8)",
+                border: showRecommendations ? "1px solid rgba(167,139,250,0.4)" : "1px solid #1e293b",
+                borderRadius: "6px",
+                color: showRecommendations ? "#a78bfa" : "#94a3b8",
+                padding: "12px 16px",
+                cursor: "pointer",
+                fontSize: "10px",
+                fontFamily: "monospace",
+                fontWeight: "600",
+                letterSpacing: "1px",
+                transition: "all 0.15s",
+                marginBottom: "12px"
+              }}
+            >
+              {showRecommendations ? "▼ HIDE RECOMMENDATIONS" : "▶ VIEW YOUR RECOMMENDATIONS"}
+            </button>
+            
+            {showRecommendations && (
+              <div style={{ marginTop: "12px" }}>
+                <FinancialRecommendations />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{
+            padding: "12px",
+            background: "rgba(13,17,23,0.8)",
+            border: "1px solid #1e293b",
+            borderRadius: "6px",
+            fontSize: "9px",
+            color: "#64748b",
+            textAlign: "center",
+            lineHeight: "1.4"
+          }}>
+            <div style={{ marginBottom: "8px" }}>
+              <span style={{ color: "#f59e0b" }}>⚠</span> UPLOAD BANK STATEMENT
+            </div>
+            <div>
+              Upload your bank statement to get personalized financial recommendations
+            </div>
+          </div>
+        )}
 
         {/* Status */}
         <div style={{
